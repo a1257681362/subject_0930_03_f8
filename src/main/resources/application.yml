@@ -67,6 +67,14 @@ museum:
     # 预约超时释放定时扫描间隔（毫秒）；重启后启动即补扫一次
     expire-scan-interval-ms: 60000
     expire-scan-on-startup: true
+  # 虫害监测（museum-8）
+  pest:
+    # 点位未指定责任保管员时处置任务上的兜底责任人
+    default-custodian: 馆方保管部
+    # 月度冻结定时扫描间隔（毫秒）：冻结上月及更早未冻结月份，当月永不冻结
+    freeze-scan-interval-ms: 3600000
+    # 应用就绪后补冻结历史月份（重启/跨月场景），冻结按月份幂等
+    freeze-on-startup: true
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml

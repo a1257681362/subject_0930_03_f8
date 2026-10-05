@@ -268,4 +268,65 @@ public final class MuseumConstants {
     public static final String ACTION_RESERVE_EXPIRE = "RESERVE_EXPIRE";
     public static final String ACTION_MOVE_START = "MOVE_START";
     public static final String ACTION_MOVE_COMPLETE = "MOVE_COMPLETE";
+
+    // --------------------------------------------------------------------
+    // museum-8 虫害监测（展厅与库房诱捕点位）
+    // --------------------------------------------------------------------
+
+    /** 点位所在区域类型：展厅 / 库房 */
+    public static final String PEST_LOC_HALL = "HALL";
+    public static final String PEST_LOC_STORAGE = "STORAGE";
+
+    /** 诱捕点位状态：在测 / 已迁移（指向新点位）/ 已停用（历史全部保留） */
+    public static final String PEST_POINT_ACTIVE = "ACTIVE";
+    public static final String PEST_POINT_MOVED = "MOVED";
+    public static final String PEST_POINT_CLOSED = "CLOSED";
+
+    /** 诱捕片状态：使用中 / 已换下（换下不删行、不删旧监测记录） */
+    public static final String STRIP_IN_USE = "IN_USE";
+    public static final String STRIP_REPLACED = "REPLACED";
+
+    /** 虫害规则版本状态：当前生效 / 已被新版本取代（只追加不改写） */
+    public static final String PEST_RULE_ACTIVE = "ACTIVE";
+    public static final String PEST_RULE_SUPERSEDED = "SUPERSEDED";
+
+    /** 虫种数量判定结论：正常 / 预警 / 达到处置阈值（随监测行固化，规则新版本不改旧结论） */
+    public static final String PEST_LEVEL_NORMAL = "NORMAL";
+    public static final String PEST_LEVEL_WARN = "WARN";
+    public static final String PEST_LEVEL_ALARM = "ALARM";
+
+    /** 处置任务状态：待处置 / 处置中 / 已关闭（关闭即封存） */
+    public static final String PEST_TASK_OPEN = "OPEN";
+    public static final String PEST_TASK_HANDLING = "HANDLING";
+    public static final String PEST_TASK_CLOSED = "CLOSED";
+
+    /** 月度冻结范围：全馆 / 单展厅 / 单库区 */
+    public static final String PEST_SCOPE_ALL = "ALL";
+    public static final String PEST_SCOPE_HALL = "HALL";
+    public static final String PEST_SCOPE_STORAGE = "STORAGE";
+
+    /** 月度冻结状态 */
+    public static final String PEST_FROZEN = "FROZEN";
+
+    /**
+     * 现场岗位：馆内岗位（CURATOR 馆藏保管员 / WAREHOUSE_KEEPER 库房管理员 /
+     * RESTORER 修复师 / VIEWER 观摩访客）可处置与关闭任务；
+     * OUTSOURCER 外包人员只能提交现场数据（检查记录与现场照片），不能处置/关闭任务。
+     */
+    public static final String ROLE_OUTSOURCER = "OUTSOURCER";
+
+    /** 虫害台账流水动作 */
+    public static final String ACTION_PEST_RULE_PUBLISH = "PEST_RULE_PUBLISH";
+    public static final String ACTION_POINT_LAY = "POINT_LAY";
+    public static final String ACTION_POINT_CLOSE = "POINT_CLOSE";
+    public static final String ACTION_POINT_MOVE = "POINT_MOVE";
+    public static final String ACTION_STRIP_INSTALL = "STRIP_INSTALL";
+    public static final String ACTION_STRIP_REPLACE = "STRIP_REPLACE";
+    public static final String ACTION_CHECK_OK = "CHECK_OK";
+    public static final String ACTION_CHECK_ALARM = "CHECK_ALARM";
+    public static final String ACTION_PEST_TASK_OPEN = "TASK_OPEN";
+    public static final String ACTION_PEST_TASK_MERGE = "TASK_MERGE";
+    public static final String ACTION_PEST_TASK_HANDLE = "TASK_HANDLE";
+    public static final String ACTION_PEST_TASK_CLOSE = "TASK_CLOSE";
+    public static final String ACTION_MONTH_FREEZE = "MONTH_FREEZE";
 }

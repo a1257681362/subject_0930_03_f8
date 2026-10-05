@@ -49,6 +49,13 @@
 | `t_loan_manifest_line` | 借展清单：随协议版本固化的出库清单快照，归还验收按出库版本清单逐项比对 |
 | `t_loan_escort_node` | 押运节点：封箱/交接/到馆/开箱四类唯一、按序登记，异常暂停、开箱双人见证 |
 | `t_loan_return_check` / `t_loan_return_check_line` | 归还验收头与逐行比对（相符/损伤/缺失），差异永久保留，一协议一条验收 |
+| `t_pest_rule_version` / `t_pest_rule_item` | 虫害阈值规则版本与虫种条目（预警/处置数量阈值），发布新版本旧版本置 `SUPERSEDED` 只追加 |
+| `t_pest_point` / `t_pest_point_move` | 诱捕点位（展厅/库房二选一，编号、布放日期、坐标、责任保管员）与迁移记录（前后坐标都保留，旧址置 `MOVED` 指向新点位） |
+| `t_pest_trap_strip` | 诱捕片安装/更换记录：更换旧片置 `REPLACED` 留行，不删除旧片与旧监测记录 |
+| `t_pest_check` / `t_pest_check_line` / `t_pest_check_photo` | 现场监测检查单（`requestNo` 幂等、所属月份、提交岗位）、虫种数量明细（阈值/结论随单固化）与现场照片 |
+| `t_pest_disposal_task` / `t_pest_task_photo` | 超阈自动生成的处置任务（关联责任展厅/库区与责任保管员，按点位+虫种归并连续超阈）与现场照片 |
+| `t_pest_month_freeze` | 监测结果月度冻结（全馆/展厅/库区口径，唯一约束幂等），冻结后该月不可补录/修改 |
+| `t_pest_ledger` | 虫害台账：规则发布/布点/迁移/换片/检查/任务开闭/冻结全部只追加留痕、标明规则版本与责任区域 |
 
 约束：文物编号 `uk_relic_no`、项目编号 `uk_project_no` 数据库层唯一（含已撤销/已作废记录）；
 撤销与作废均不删除任何数据。
@@ -392,3 +399,80 @@ mvn test
 管理员全见的三档权限；台账动作链可追溯。
 `StorageReservationConcurrentTest` 覆盖：8 并发约同格位仅 1 成功、8 并发同架重叠仅 1 成功、
 8 并发同一流水号全部命中同一条。
+
+## 虫害监测（museum-8）
+
+在展厅（HALL）与库房库区（STORAGE）布设**诱捕点位**，现场登记虫种数量与照片；
+按提交时生效的阈值规则版本判定，**达到处置阈值自动生成处置任务并关联责任区域**；
+监测结果**按月份冻结**；**外包人员只能提交现场数据**。
+
+### 监测规则
+
+- **布点关联责任区域**：点位必须二选一指定 `hallId`（展厅）或 `storageAreaId`（库区），
+  记录点位编号、布放日期、坐标、诱捕器类型；布点时固化责任区域编号/名称快照，
+  责任保管员默认取展厅 `custodian` 或库区 `manager`（也可显式指定）。
+- **规则只能发新版本**：虫害阈值按虫种配预警阈值 `warnThreshold` 与处置阈值
+  `alarmThreshold`；发布新版本后旧版本置 `SUPERSEDED` 只读。检查单与每条虫种明细
+  固化提交时的版本号、两个阈值与判定结论（NORMAL/WARN/ALARM），**新版本永不改写
+  历史监测记录的旧结论**；处置任务固化首警版本与处置阈值。
+- **超阈自动开任务并关联责任区域**：任一虫种数量达到处置阈值即按「点位+虫种」
+  自动开立处置任务（`PDT-000001`），任务带展厅或库区 id、区域编号/名称快照与
+  责任保管员；同点位同虫种的连续超阈检查并入同一在途任务（更新末次/峰值/次数），
+  馆方复核关闭后再超阈另开新任务（在途归并键稀疏唯一，终态置空）。
+- **外包人员权限边界**：`OUTSOURCER` 可以提交检查单、上传检查单/任务现场照片，
+  但**不能登记处置、不能关闭任务**；任务必须先由馆内岗位（CURATOR/
+  WAREHOUSE_KEEPER 等非 OUTSOURCER）登记处置，且关联至少一张现场照片后，
+  才能由馆内岗位复核关闭，关闭即封存（不能再补照片、不能重复关闭）。
+- **更换诱捕片不删旧记录**：首次安装落 `IN_USE` 片；更换必须填更换原因，旧片
+  置 `REPLACED` 留行，另立新片；旧片与旧片期间的检查单永久保留，新检查单固化新片号。
+- **点位迁移保留前后坐标**：迁移时旧址置 `MOVED` 并回写 `movedToId`，另立一条
+  `ACTIVE` 新点位行（承继区域与责任人），`t_pest_point_move` 一行同时保存
+  旧坐标、新坐标、原因与操作人；旧址不能再提交数据，历史检查/换片/任务留在旧址。
+- **监测结果按月份冻结**：检查单按检查时间归月（`period_month=yyyy-MM`）。
+  手动 `POST /api/pest-freezes/month?periodMonth=` 冻结指定**已结束**历史月份
+  （当月拒绝冻结，重复冻结幂等返回 false）；定时扫描（启动补扫 +
+  `freeze-scan-interval-ms` 周期扫描）自动冻结上月及更早未冻结月份。
+  冻结后该月检查单不能补录、照片不能补传（全馆冻结或该点位所属区域单独冻结命中即拒）。
+- **现场数据幂等且不可变**：检查单以请求流水号 `requestNo` 为全库唯一幂等锚点，
+  弱网补传/重试只形成一单；检查单提交即封存，系统不提供修改/删除入口。
+- **照片内容寻址**：复用 museum-2 的 SHA-256 影像存储，同内容全库一份物理文件、
+  引用计数累加，只追加不物理删除。
+- **台账留痕**：规则发布、布点、停用、迁移、安装/更换诱捕片、检查正常/超阈、
+  任务开立/并入/处置/关闭、月度冻结全部写入 `t_pest_ledger`，超阈检查与任务
+  台账标明规则版本与责任区域。
+
+### 虫害接口
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `POST /api/pest-rules/publish` | 发布虫害阈值规则新版本（旧版本自动置 SUPERSEDED） |
+| `GET  /api/pest-rules` / `/api/pest-rules/active` / `/api/pest-rules/{id}` | 版本列表 / 当前生效版本 / 版本详情（含虫种条目） |
+| `POST /api/pest-points` | 布放诱捕点位（HALL 传 hallId / STORAGE 传 storageAreaId，编号唯一） |
+| `GET  /api/pest-points?locationType=&hallId=&storageAreaId=&status=` | 点位列表 |
+| `GET  /api/pest-points/{id}` | 点位详情：点位头 + 迁移轨迹（前后坐标）+ 诱捕片记录（含已换下旧片） |
+| `POST /api/pest-points/{id}/move` | 点位迁移（旧址 MOVED、另立新点位、保留前后坐标） |
+| `POST /api/pest-points/{id}/close` | 点位停用（只置 CLOSED，历史保留） |
+| `POST /api/pest-points/{id}/strips` | 首次安装/更换诱捕片（更换必填原因，旧片 REPLACED 留行） |
+| `POST /api/pest-points/{pointId}/checks` | 提交现场检查单（`requestNo` 幂等；外包人员可提交；冻结月拒绝） |
+| `GET  /api/pest-checks?pointId=&periodMonth=&abnormal=` | 监测记录列表 |
+| `GET  /api/pest-checks/{id}` | 检查单报表：单据头（规则版本/月份）+ 虫种明细（阈值/结论固化）+ 照片 |
+| `POST /api/pest-checks/{id}/photos` | 检查单现场照片（multipart，`role` 标明岗位，外包可传，冻结月拒绝） |
+| `GET  /api/pest-tasks?status=&hallId=&storageAreaId=&pointId=&pestSpecies=` | 处置任务列表（可按责任区域过滤） |
+| `GET  /api/pest-tasks/{id}` | 任务报表：任务头（责任区域、首警规则版本）+ 现场照片 |
+| `POST /api/pest-tasks/{id}/handle` | 登记处置（OPEN→HANDLING；OUTSOURCER 拒绝） |
+| `POST /api/pest-tasks/{id}/close` | 馆内岗位复核关闭（须先处置且有照片；OUTSOURCER 拒绝） |
+| `POST /api/pest-tasks/{id}/photos` | 任务现场照片（外包可传；关闭后封存） |
+| `POST /api/pest-freezes/month?periodMonth=&frozenBy=` | 手动冻结指定历史月份（当月拒绝、重复幂等） |
+| `POST /api/pest-freezes/freeze-due` | 手动触发冻结所有已结束未冻结月份 |
+| `GET  /api/pest-freezes` | 月度冻结记录列表 |
+| `GET  /api/pest-ledgers?pointId=&taskId=&hallId=&storageAreaId=` | 虫害台账（可追溯） |
+
+### 测试
+
+`PestMonitoringTest`（独立内存库）覆盖：展厅/库房布点固化责任区域与保管员、区域二选一
+与编号唯一；现场单逐虫种按生效版本固化阈值/结论、requestNo 补传幂等；达到处置阈值自动
+开任务并关联责任展厅/库区与责任人，连续超阈并入、关闭后另开；外包人员提交与传照片放行、
+处置与关闭拒绝，关闭前必须处置+照片；换片旧片 REPLACED 留行且旧监测记录不删；迁移旧址
+MOVED、新址承继、迁移记录前后坐标齐全；历史月份冻结后补录/补传拒绝、当月不可冻结、
+冻结幂等；规则新版本旧版本 SUPERSEDED 且历史旧结论（阈值/判定）不被改写、新单按新版本
+判定；库房任务同样关联库区；台账全动作与规则版本留痕。
