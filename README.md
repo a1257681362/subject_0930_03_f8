@@ -49,6 +49,13 @@
 | `t_loan_manifest_line` | 借展清单：随协议版本固化的出库清单快照，归还验收按出库版本清单逐项比对 |
 | `t_loan_escort_node` | 押运节点：封箱/交接/到馆/开箱四类唯一、按序登记，异常暂停、开箱双人见证 |
 | `t_loan_return_check` / `t_loan_return_check_line` | 归还验收头与逐行比对（相符/损伤/缺失），差异永久保留，一协议一条验收 |
+| `t_pest_rule_version` / `t_pest_rule_item` | 虫种阈值规则版本与条目：发布新版本旧版本置 `SUPERSEDED` 只追加，监测记录旧结论不改写 |
+| `t_pest_trap_point` / `t_pest_point_move` | 展厅/库房诱捕点位（编号/布放日期/坐标/责任区域）与迁移记录（前后坐标只追加） |
+| `t_pest_trap_card` | 诱捕片：更换只置 `REPLACED`，旧片与旧监测记录永不删除 |
+| `t_pest_monitor_record` / `t_pest_monitor_detail` / `t_pest_monitor_photo` | 监测记录（规则版本快照+结论固化）/ 虫种数量明细（阈值快照）/ 现场照片（内容寻址） |
+| `t_pest_dispose_task` | 超阈值处置任务：关联责任区域，外包人员不能关闭 |
+| `t_pest_month_freeze` | 监测月份冻结（一月一行只追加）：冻结后该月记录与照片不再接受补录 |
+| `t_pest_ledger` | 虫害台账：规则发布/点位/诱捕片/监测/任务/冻结全部只追加留痕 |
 
 约束：文物编号 `uk_relic_no`、项目编号 `uk_project_no` 数据库层唯一（含已撤销/已作废记录）；
 撤销与作废均不删除任何数据。
@@ -392,3 +399,63 @@ mvn test
 管理员全见的三档权限；台账动作链可追溯。
 `StorageReservationConcurrentTest` 覆盖：8 并发约同格位仅 1 成功、8 并发同架重叠仅 1 成功、
 8 并发同一流水号全部命中同一条。
+
+## 虫害监测（museum-8）
+
+展厅与库房设置**诱捕点位**，监测记录登记**虫种数量与照片**；虫种阈值规则按**版本**发布，
+监测结论随记录固化；**超阈值生成处置任务并关联责任区域**；**更换诱捕片不删除旧记录**；
+**点位迁移保留前后坐标**；**监测结果按月份冻结**；**外包人员只能提交现场数据，不能关闭任务**。
+
+### 监测规则
+
+- **点位建档**：展厅（`HALL`，引用 `t_hall`）与库房（`STORAGE`，引用 `t_storage_area`）均可布放；
+  点位编号全库唯一，登记布放日期、坐标与责任区域；区域名称快照自展厅/库区带入。
+- **虫种阈值规则按版本发布，只追加不改写**：`POST /api/pest-rules/publish` 发布新版本后
+  旧生效版本置 `SUPERSEDED`（内容永不改写）。监测记录提交时固化 `rule_version_id/no` 快照、
+  逐虫种阈值快照与判定结论——**规则调整只能生成新版本，不能改动监测记录旧结论**。
+- **监测提交**：外包人员（`OUTSOURCE`）与馆内人员（`INTERNAL`）均可提交现场数据；
+  虫种数量逐条登记（同记录内虫种不可重复），规则无条目的虫种不猜测阈值、不参与判定；
+  记录关联提交时点位的在布诱捕片。照片走影像归档 SHA-256 内容寻址（同文件只一份），
+  同一记录内同照片只登记一次。
+- **超阈值生成处置任务**：任一虫种数量严格大于阈值即判定 `OVER_THRESHOLD`，
+  生成处置任务（一记录至多一任务）并关联点位**责任区域**快照。
+- **更换诱捕片不删除旧记录**：布放新片时旧片置 `REPLACED`（含更换时间/更换人），
+  旧片与其监测记录永久保留可查；旧监测记录仍指向旧片。
+- **点位迁移保留前后坐标**：迁移写入 `t_pest_point_move`（from/to 坐标、迁移人、原因），
+  点位行只保存当前坐标，迁移记录只追加。
+- **监测结果按月份冻结**：`POST /api/pest-monitor/freeze` 冻结月份（`yyyy-MM`，幂等，
+  重复冻结只一条）；冻结后该月监测记录与照片不再接受补录/更改，已冻结事实保留可查；
+  冻结只追加，不解冻。
+- **外包人员不能关闭任务**：`POST /api/pest-tasks/{id}/close` 仅 `INTERNAL` 可关闭，
+  `OUTSOURCE` 一律拒绝；已关闭任务不可重复关闭。
+- 规则发布、点位建档/迁移/停用、诱捕片布放/更换、监测提交、任务生成/关闭、月份冻结
+  全部只追加写入 `t_pest_ledger`，尽量标明规则版本，虫害监测全程可追溯。
+
+### 监测接口
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `POST /api/pest-rules/publish` | 发布虫种阈值规则新版本（旧版本自动 SUPERSEDED） |
+| `GET /api/pest-rules` / `GET /api/pest-rules/active` / `GET /api/pest-rules/{id}` | 版本列表 / 当前生效版本 / 版本虫种条目 |
+| `POST /api/pest-points` / `GET /api/pest-points` / `GET /api/pest-points/{id}` | 点位建档（编号/布放日期/坐标/责任区域）/ 列表 / 详情（含诱捕片与迁移记录） |
+| `POST /api/pest-points/{id}/move` | 点位迁移（保留前后坐标） |
+| `POST /api/pest-points/{id}/retire` | 点位停用（历史保留） |
+| `POST /api/pest-points/{id}/cards` / `GET /api/pest-points/{id}/cards` | 布放/更换诱捕片（旧片 REPLACED 不删除）/ 诱捕片列表 |
+| `POST /api/pest-records` | 提交监测记录（虫种数量；外包/馆内均可；超阈值生成处置任务） |
+| `GET  /api/pest-records?pointId=&month=&conclusion=` | 监测记录列表 |
+| `GET  /api/pest-records/{id}` | 记录报表：记录头（标明规则版本）+ 虫种明细（阈值快照）+ 现场照片 |
+| `POST /api/pest-records/{id}/photos` | multipart 上传现场照片（内容寻址去重；月份冻结后拒收） |
+| `GET  /api/pest-tasks?pointId=&status=&responsibleArea=` | 处置任务列表（可按责任区域过滤） |
+| `POST /api/pest-tasks/{id}/close` | 关闭处置任务（仅馆内人员；外包人员拒绝） |
+| `POST /api/pest-monitor/freeze` / `GET /api/pest-monitor/freezes` | 冻结监测月份（幂等）/ 已冻结月份列表 |
+| `GET  /api/pest-ledgers?pointId=` | 虫害台账（不传点位为全馆） |
+
+### 测试
+
+`PestMonitorTest`（独立内存库）覆盖：展厅与库房点位建档（编号唯一/布放日期/坐标/责任区域快照）、
+未布片拒交、外包人员提交正常记录不生成任务、同记录虫种重复拒绝、照片内容寻址去重；
+更换诱捕片旧片 REPLACED 且旧监测记录仍指向旧片；点位迁移前后坐标留痕；
+超阈值生成处置任务并关联责任区域、规则无条目虫种不判定；外包人员关闭任务拒绝、
+馆内人员可关闭、重复关闭拒绝；月份冻结后记录与照片拒收、重复冻结幂等、已冻结事实可查；
+规则 v2 发布后旧记录结论与阈值快照不改写、新记录按 v2 判定并关联更换后在布诱捕片；
+台账全动作留痕（迁移台账含前后坐标、任务台账关联责任区域）。

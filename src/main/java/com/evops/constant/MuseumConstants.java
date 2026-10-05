@@ -268,4 +268,49 @@ public final class MuseumConstants {
     public static final String ACTION_RESERVE_EXPIRE = "RESERVE_EXPIRE";
     public static final String ACTION_MOVE_START = "MOVE_START";
     public static final String ACTION_MOVE_COMPLETE = "MOVE_COMPLETE";
+
+    // --------------------------------------------------------------------
+    // museum-8 虫害监测
+    // --------------------------------------------------------------------
+
+    /** 虫害阈值规则版本状态：草稿 / 当前生效 / 已被新版本取代（只追加不改写） */
+    public static final String PEST_RULE_DRAFT = "DRAFT";
+    public static final String PEST_RULE_ACTIVE = "ACTIVE";
+    public static final String PEST_RULE_SUPERSEDED = "SUPERSEDED";
+
+    /** 诱捕点位区域类型：展厅 / 库房 */
+    public static final String PEST_ZONE_HALL = "HALL";
+    public static final String PEST_ZONE_STORAGE = "STORAGE";
+
+    /** 诱捕点位状态：在用 / 停用（停用不删历史） */
+    public static final String PEST_POINT_ACTIVE = "ACTIVE";
+    public static final String PEST_POINT_RETIRED = "RETIRED";
+
+    /** 诱捕片状态：在布 / 已更换（更换不删旧片与旧监测记录） */
+    public static final String PEST_CARD_ACTIVE = "ACTIVE";
+    public static final String PEST_CARD_REPLACED = "REPLACED";
+
+    /** 监测结论：正常 / 超阈值（结论随记录固化，规则新版本不改写旧结论） */
+    public static final String PEST_CONCLUSION_NORMAL = "NORMAL";
+    public static final String PEST_CONCLUSION_OVER = "OVER_THRESHOLD";
+
+    /** 监测提交人角色：馆内人员 / 外包人员（外包只能提交现场数据，不能关闭任务） */
+    public static final String PEST_ROLE_INTERNAL = "INTERNAL";
+    public static final String PEST_ROLE_OUTSOURCE = "OUTSOURCE";
+
+    /** 处置任务状态：待处置 / 已关闭 */
+    public static final String PEST_TASK_OPEN = "OPEN";
+    public static final String PEST_TASK_CLOSED = "CLOSED";
+
+    /** 虫害台账流水动作 */
+    public static final String ACTION_PEST_RULE_PUBLISH = "RULE_PUBLISH";
+    public static final String ACTION_PEST_POINT_CREATE = "POINT_CREATE";
+    public static final String ACTION_PEST_POINT_MOVE = "POINT_MOVE";
+    public static final String ACTION_PEST_POINT_RETIRE = "POINT_RETIRE";
+    public static final String ACTION_PEST_CARD_DEPLOY = "CARD_DEPLOY";
+    public static final String ACTION_PEST_CARD_REPLACE = "CARD_REPLACE";
+    public static final String ACTION_PEST_RECORD_SUBMIT = "RECORD_SUBMIT";
+    public static final String ACTION_PEST_TASK_GENERATE = "TASK_GENERATE";
+    public static final String ACTION_PEST_TASK_CLOSE = "TASK_CLOSE";
+    public static final String ACTION_PEST_MONTH_FREEZE = "MONTH_FREEZE";
 }
